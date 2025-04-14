@@ -1,64 +1,88 @@
-(function() {
-    // Wait for the page to load relevant elements
-    window.addEventListener('DOMContentLoaded', () => {
-        // make elements for scryfall userscript
-        const copyableElements = document.querySelectorAll('.card-text-card-name');
+// ==UserScript==
+// @name         Scryfall Copy Name (CSP-Safe Text Version)
+// @namespace    http://tampermonkey.net/
+// @version      1.6
+// @description  Adds a copy button to card names on Scryfall, CSP-safe with no emojis or inline styles/scripts.
+// @author       You
+// @match        *://scryfall.com/*
+// @grant        none
+// ==/UserScript==
 
-        copyableElements.forEach(span => {
-            // new container for styling
+(function () {
+    'use strict';
+
+    // Use DOM-created <style> instead of GM_addStyle to avoid CSP inline block
+    const style = document.createElement("style");
+    style.textContent = `
+        .copyable-span {
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer !important;
+        }
+        .copyable-span .text-span {
+            font-weight: bold;
+        }
+        .copyable-span .copy-icon {
+            margin-left: 6px;
+            font-size: 0.8em;
+            color: #079BF5;
+            user-select: none;
+        }
+        .copyable-span.copied .copy-icon {
+            color: green;
+        }
+    `;
+    document.head.appendChild(style);
+
+    function initCopyElements() {
+        document.querySelectorAll('.card-text-card-name:not([data-copy-initialized])').forEach(span => {
+            span.setAttribute('data-copy-initialized', 'true');
+
             const containerSpan = document.createElement("span");
-            containerSpan.style.display = "inline-flex";
-            containerSpan.style.alignItems = "center";
-            containerSpan.style.cursor = "pointer";
-            containerSpan.title = "Click to copy";
+            containerSpan.className = "copyable-span";
+            containerSpan.setAttribute('title', 'Click to copy');
 
-            // generate class
-            const className = `copyable-span`;
-            containerSpan.className = className;
-
-            // span for text
             const textSpan = document.createElement("span");
-            textSpan.className = `text-span`;
-            textSpan.innerText = copyableElements.innerText;
-            // textSpan.style.fontSize = "12px";
-            textSpan.style.fontWeight = "bold";
-            // textSpan.style.color = "black";
+            textSpan.className = "text-span";
+            textSpan.textContent = span.textContent;
 
-            // copy icon
-            let copyIcon = document.createElement("span");
-            copyIcon.className = `copy-icon`;
-            copyIcon.innerHTML = "&#x1f5cd;";
-            copyIcon.style.marginLeft = "2px";
-            copyIcon.style.fontSize = "12px";
-            copyIcon.style.color = "#079BF5";
+            const copyIcon = document.createElement("span");
+            copyIcon.className = "copy-icon";
+            copyIcon.textContent = "[Copy]";
 
-            // append icon
             containerSpan.appendChild(textSpan);
             containerSpan.appendChild(copyIcon);
 
-            // Click event to copy to clipboard
-            containerSpan.addEventListener("click", async function () {
+            containerSpan.addEventListener("click", async () => {
                 try {
-                    // text from span clicked
-                    const textSpan = containerSpan.querySelector(".text-span");
-                    await navigator.clipboard.writeText(textSpan.innerText.trim());
-
-                    // change icon on click
-                    copyIcon.innerHTML = `Copied &#x1f5cd;`;
-                    copyIcon.style.color = "green";
-
-                    // swap back after five seconds
-                    setTimeout (() => {
-                        copyIcon.innerHTML = "&#x1f5cd;";
-                        copyIcon.style.color = "#079BF5";
-                    }, 3000);
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(textSpan.textContent.trim());
+                        copyIcon.textContent = "[✔]";
+                        containerSpan.classList.add("copied");
+                        setTimeout(() => {
+                            copyIcon.textContent = "[Copy]";
+                            containerSpan.classList.remove("copied");
+                        }, 1500);
+                    } else {
+                        alert("Clipboard API not available.");
+                    }
                 } catch (error) {
-                    console.error("Failed to copy text: ", error);
+                    console.error("Clipboard write failed:", error);
                 }
             });
 
-            // replace card name span with copyable span
-            copyableElements.parentNode.replaceChild(containerSpan, copyableElements);
+            span.replaceWith(containerSpan);
         });
-    });
+    }
+
+    // Run on initial load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initCopyElements);
+    } else {
+        initCopyElements();
+    }
+
+    // Handle dynamic content
+    const observer = new MutationObserver(() => initCopyElements());
+    observer.observe(document.body, { childList: true, subtree: true });
 })();
